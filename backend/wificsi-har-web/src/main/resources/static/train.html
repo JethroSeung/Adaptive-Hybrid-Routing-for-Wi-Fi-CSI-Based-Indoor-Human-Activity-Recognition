@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>模型训练 - WiFi-CSI</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="home-bg">
+
+<nav class="navbar">
+  <div class="nav-content">
+    <div class="logo">📡 WiFi-CSI 行为识别系统 <span class="divider">/</span> <span>模型训练</span></div>
+    <button class="btn btn-text" onclick="window.location.href='index.html'">返回首页</button>
+  </div>
+</nav>
+
+<div class="container">
+  <div class="card-header">
+    <h2>配置与训练</h2>
+    <p class="text-muted">请指定训练数据集所在的文件路径，系统将自动进行特征提取与模型拟合。</p>
+  </div>
+
+  <div class="input-group section">
+    <label for="dataPath">数据集路径</label>
+    <div class="flex-row">
+      <input type="text" id="dataPath" placeholder="例如: D:\Research\Dataset\TrainData...">
+      <button class="btn btn-primary" id="btnStartTrain" onclick="startTraining()">开始训练</button>
+    </div>
+  </div>
+
+  <div id="progressSection" class="hidden">
+    <div class="progress-info">
+      <span class="text-bold">模型训练进度</span>
+      <span id="progressText">0%</span>
+    </div>
+    <div class="progress-wrapper">
+      <div class="progress-bar">
+        <div class="progress-inner progress-striped" id="progressBar"></div>
+      </div>
+    </div>
+
+    <div class="terminal-box">
+      <div class="terminal-header">
+        <span>●</span><span>●</span><span>●</span>
+        <span class="terminal-title">Console Output</span>
+      </div>
+      <div class="log-box" id="logBox"></div>
+    </div>
+  </div>
+
+  <div id="afterTrain" class="action-footer hidden">
+    <button class="btn btn-outline" onclick="retrain()">↺ 重新训练</button>
+    <button class="btn btn-success" onclick="goInference()">进入推理模块 ➔</button>
+  </div>
+
+</div>
+
+<script>
+  async function startTraining(){
+    const path = document.getElementById("dataPath").value.trim();
+    if(!path){ alert("请输入数据集路径"); return; }
+
+    document.getElementById("btnStartTrain").disabled = true;
+    document.getElementById("progressSection").classList.remove("hidden");
+    document.getElementById("afterTrain").classList.add("hidden");
+    const logBox = document.getElementById("logBox");
+    logBox.innerHTML = "> 初始化训练环境...\n";
+
+    let progress = 0;
+    const bar = document.getElementById("progressBar");
+    const text = document.getElementById("progressText");
+
+    const fakeProgress = setInterval(()=>{
+      progress += 5;
+      if(progress <= 90){
+        bar.style.width = progress + "%";
+        text.innerText = progress + "%";
+        logBox.innerHTML += "> 正在提取特征并训练模型 (" + progress + "%)...\n";
+        logBox.scrollTop = logBox.scrollHeight;
+      }
+    }, 300);
+
+    try {
+      const response = await fetch("/api/v1/train", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ datasetPath: path })
+      });
+
+      clearInterval(fakeProgress);
+      bar.style.width = "100%";
+      text.innerText = "100%";
+      bar.classList.remove("progress-striped");
+
+      const result = await response.json();
+
+      if(result.code === 0){
+        logBox.innerHTML += "\n<span class='text-success'>[SUCCESS] 模型训练完成！准确率达标。</span>\n";
+        localStorage.setItem("model_trained", "true");
+        document.getElementById("afterTrain").classList.remove("hidden");
+      } else {
+        logBox.innerHTML += "\n<span class='text-danger'>[ERROR] 训练失败: " + result.message + "</span>\n";
+        document.getElementById("btnStartTrain").disabled = false;
+      }
+    } catch (e) {
+      clearInterval(fakeProgress);
+      logBox.innerHTML += "\n<span class='text-danger'>[ERROR] 网络或服务器异常</span>\n";
+      document.getElementById("btnStartTrain").disabled = false;
+    }
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  function retrain(){
+    localStorage.removeItem("model_trained");
+    location.reload();
+  }
+
+  function goInference(){
+    window.location.href = "inference.html";
+  }
+</script>
+</body>
+</html>

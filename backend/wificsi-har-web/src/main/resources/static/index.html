@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>WiFi-CSI 行为识别系统</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="home-bg">
+
+<nav class="navbar">
+  <div class="nav-content">
+    <div class="logo">📡 WiFi-CSI 人体行为识别系统</div>
+  </div>
+</nav>
+
+<div class="container hero-container">
+  <div class="hero-header">
+    <h1>基于 Wi-Fi CSI 的轻量化室内人体活动识别系统</h1>
+    <p class="subtitle">融合 DTW 与 SVM 混合模型，实现行为精准判定</p>
+  </div>
+
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="feature-icon">🛜</div>
+      <div class="feature-title">无感非接触识别</div>
+      <div class="feature-desc">利用环境中现有的 WiFi 信道状态信息，无需穿戴任何传感器即可捕捉人体微动。</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">🧠</div>
+      <div class="feature-title">DTW+SVM 混合模型</div>
+      <div class="feature-desc">结合动态时间规整与支持向量机，有效解决动作时间尺度不一的问题，使用原创自适应算法进行调度，提升分类精度。</div>
+    </div>
+    <div class="feature-card">
+      <div class="feature-icon">⚡</div>
+      <div class="feature-title">高效实时推理</div>
+      <div class="feature-desc">优化的端到端特征提取与降维算法，在普通计算节点上即可实现低延迟的动作推断。</div>
+    </div>
+  </div>
+
+  <div class="action-section">
+    <button class="btn btn-primary btn-large" onclick="goTrain()">
+      进入模型训练模块 ➔
+    </button>
+  </div>
+</div>
+
+<script>
+  function goTrain(){
+    window.location.href="train.html";
+  }
+</script>
+
+</body>
+</html>

@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>行为推理 - WiFi-CSI</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- 引入 Chart.js 绘制柱状图 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="home-bg">
+
+<nav class="navbar">
+    <div class="nav-content">
+        <div class="logo">📡 WiFi-CSI 行为识别系统 <span class="divider">/</span> <span>模型推理</span></div>
+        <button class="btn btn-text" onclick="window.location.href='train.html'">返回训练</button>
+    </div>
+</nav>
+
+<div class="container" style="max-width: 1000px;">
+    <div class="card-header">
+        <h2>动作识别推理</h2>
+        <p class="text-muted">导入测试集路径，系统将基于已训练的混合模型输出分类结果与评估指标。</p>
+    </div>
+
+    <div class="input-group section">
+        <label>测试集路径</label>
+        <div class="flex-row">
+            <input type="text" id="testPath" placeholder="例如: D:\Research\Dataset\TestData...">
+            <button class="btn btn-primary" id="btnStartInference" onclick="startInference()">开始推理</button>
+        </div>
+    </div>
+
+    <div id="progressSection" class="hidden">
+        <div class="progress-wrapper">
+            <div class="progress-bar">
+                <div class="progress-inner progress-striped" id="progressBar"></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="resultArea" class="hidden">
+        <!-- 结果将由 JS 动态注入此处 -->
+    </div>
+</div>
+
+<script>
+    if(localStorage.getItem("model_trained") !== "true"){
+        alert("尚未检测到已训练模型，请先完成训练！");
+        window.location.href = "train.html";
+    }
+
+    async function startInference(){
+        const path = document.getElementById("testPath").value.trim();
+        if(!path){ alert("请输入测试集路径"); return; }
+
+        document.getElementById("btnStartInference").disabled = true;
+        document.getElementById("progressSection").classList.remove("hidden");
+        document.getElementById("resultArea").classList.add("hidden");
+        const bar = document.getElementById("progressBar");
+        bar.classList.add("progress-striped");
+
+        let progress = 0;
+        const fakeProgress = setInterval(() => {
+            progress += 7;
+            if(progress <= 90){ bar.style.width = progress + "%"; }
+        }, 300);
+
+        try {
+            const response = await fetch("/api/v1/inference", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ testPath: path })
+            });
+
+            clearInterval(fakeProgress);
+            bar.style.width = "100%";
+            bar.classList.remove("progress-striped");
+
+            const result = await response.json();
+
+            if(result.code !== 0){
+                document.getElementById("resultArea").innerHTML = `<div class="alert alert-danger">推理失败：${result.message || '未知错误'}</div>`;
+                document.getElementById("resultArea").classList.remove("hidden");
+                document.getElementById("btnStartInference").disabled = false;
+                return;
+            }
+
+            renderResult(result.data);
+            document.getElementById("resultArea").classList.remove("hidden");
+            document.getElementById("btnStartInference").disabled = false;
+
+        } catch(e) {
+            clearInterval(fakeProgress);
+            document.getElementById("resultArea").innerHTML = `<div class="alert alert-danger">请求失败，请检查后端服务是否正常启动。</div>`;
+            document.getElementById("resultArea").classList.remove("hidden");
+            document.getElementById("btnStartInference").disabled = false;
+        }
+    }
+
+    function renderResult(data){
+        const accPercentage = (data.accuracy * 100).toFixed(2);
+
+        // 1. 总体准确率与大标题
+        let html = `
+            <div class="result-header">
+                <h3>推理分析报告</h3>
+                <div class="acc-badge">
+                    <span class="acc-label">系统总体准确率 (Overall Accuracy)</span>
+                    <span class="acc-value">${accPercentage}%</span>
+                </div>
+            </div>
+        `;
+
+        // 2. 柱状图容器
+        html += `
+            <h4 class="section-title">分层动作准确率统计 (Bar Chart)</h4>
+            <div class="chart-wrapper">
+                <canvas id="accuracyChart"></canvas>
+            </div>
+            <div class="card-grid" style="margin-top: 20px;">
+        `;
+
+        // 8个动作的卡片（辅助展示）
+        data.classes.forEach((c, i) => {
+            const val = (data.per_class_accuracy[i] * 100).toFixed(1);
+            html += `
+                <div class="metric-card">
+                    <div class="metric-title">${c}</div>
+                    <div class="metric-val">${val}%</div>
+                </div>
+            `;
+        });
+        html += "</div>";
+
+        // 3. 混淆矩阵 (带热力图效果)
+        html += `<h4 class="section-title">混淆矩阵 (Confusion Matrix)</h4>
+                 <div class="matrix-container">
+                 <table class="matrix-table">
+                 <thead><tr><th>真实 \\ 预测</th>`;
+
+        // 渲染表头
+        data.classes.forEach(c => { html += `<th>${c}</th>`; });
+        html += `</tr></thead><tbody>`;
+
+        // 寻找矩阵最大值用于计算热力图颜色深度
+        let maxVal = Math.max(...data.confusion_matrix.flat());
+
+        data.confusion_matrix.forEach((r, i) => {
+            html += `<tr><th>${data.classes[i]}</th>`; // 渲染行头
+            r.forEach((c) => {
+                // 计算透明度 (最小0，最大0.85防止过深遮挡文字)
+                let alpha = maxVal > 0 ? (c / maxVal) : 0;
+                let bgColor = c === 0 ? 'transparent' : `rgba(37, 99, 235, ${alpha * 0.85})`;
+                let textColor = alpha > 0.45 ? '#ffffff' : 'var(--text-main)';
+                let fontWeight = c > 0 ? 'bold' : 'normal';
+
+                html += `<td style="background-color: ${bgColor}; color: ${textColor}; font-weight: ${fontWeight};">${c}</td>`;
+            });
+            html += "</tr>";
+        });
+        html += "</tbody></table></div>";
+
+        // 4. 文件预测列表
+        html += `<h4 class="section-title">预测结果清单</h4>
+                 <div class="result-list">`;
+        data.results.forEach(item => {
+            html += `
+                <div class="result-item">
+                    <span class="file-name text-muted">${item.file}</span>
+                    <span class="arrow">➔</span>
+                    <span class="label-tag">${item.label}</span>
+                </div>
+            `;
+        });
+        html += "</div>";
+
+        // 注入HTML
+        document.getElementById("resultArea").innerHTML = html;
+
+        // 5. 渲染柱状图 (需在HTML注入后执行)
+        renderChart(data);
+    }
+
+    function renderChart(data) {
+        const ctx = document.getElementById('accuracyChart').getContext('2d');
+        const accuracies = data.per_class_accuracy.map(a => (a * 100).toFixed(1));
+
+        // 销毁旧图表防止重叠
+        if(window.accChart) { window.accChart.destroy(); }
+
+        window.accChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: data.classes,
+                datasets:[{
+                    label: '识别准确率 (%)',
+                    data: accuracies,
+                    backgroundColor: 'rgba(59, 130, 246, 0.6)', // 优雅的灰蓝色
+                    borderColor: 'rgba(37, 99, 235, 1)',
+                    borderWidth: 1,
+                    borderRadius: 4,
+                    hoverBackgroundColor: 'rgba(37, 99, 235, 0.8)'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        grid: { color: '#e2e8f0' }
+                    },
+                    x: {
+                        grid: { display: false }
+                    }
+                },
+                plugins: {
+                    legend: { display: false } // 隐藏多余的图例
+                }
+            }
+        });
+    }
+</script>
+
+</body>
+</html>
